@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="540" viewBox="0 0 1100 540" role="img" aria-label="Architecture: environment, features, agent, replay buffer, trainer, model files, server and browser">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 9 5 1 8.5z" fill="#7d8ea0"/></marker></defs>
+<rect width="1100" height="540" rx="18" fill="#0a0e13"/><rect x="0.5" y="0.5" width="1099" height="539" rx="17.5" fill="none" stroke="#2a3a4b"/>
+<path d="M230 100H290" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="260" y="88" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">game</text>
+<path d="M490 100H550" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="520" y="88" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">inputs</text>
+<path d="M650 60C650 10 130 10 130 60" fill="none" stroke="#fbbf24" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="390" y="24" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#fbbf24">ε-greedy action</text>
+<path d="M130 140V240" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="100" y="198" text-anchor="end" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">n-step</text>
+<path d="M230 280H650V140" fill="none" stroke="#a78bfa" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="440" y="270" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#a78bfa">minibatch</text>
+<path d="M810 100H750" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="780" y="88" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">drives</text>
+<path d="M910 140V240" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="925" y="195" text-anchor="start" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">best checkpoint</text>
+<path d="M910 320V420" fill="none" stroke="#7d8ea0" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="925" y="375" text-anchor="start" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8ea0">loads</text>
+<path d="M810 460H750" fill="none" stroke="#34d399" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="1 0" marker-end="url(#ar)"/>
+<text x="780" y="448" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#34d399">API</text>
+<g><rect x="30" y="60" width="200" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="30" y="60" width="5" height="80" rx="2.5" fill="#22d3ee"/>
+  <text x="52" y="94" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#22d3ee">env.kc</text>
+  <text x="52" y="118" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">Snake rules · rewards</text></g>
+<g><rect x="290" y="60" width="200" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="290" y="60" width="5" height="80" rx="2.5" fill="#22d3ee"/>
+  <text x="312" y="94" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#22d3ee">features.kc</text>
+  <text x="312" y="118" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">19 egocentric inputs</text></g>
+<g><rect x="550" y="60" width="200" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="550" y="60" width="5" height="80" rx="2.5" fill="#a78bfa"/>
+  <text x="572" y="94" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#a78bfa">agent.kc</text>
+  <text x="572" y="118" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">Double DQN · online + target</text></g>
+<g><rect x="810" y="60" width="240" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="810" y="60" width="5" height="80" rx="2.5" fill="#fbbf24"/>
+  <text x="832" y="94" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#fbbf24">trainer.kc</text>
+  <text x="832" y="118" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">loop · eval · checkpoints</text></g>
+<g><rect x="30" y="240" width="200" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="30" y="240" width="5" height="80" rx="2.5" fill="#a78bfa"/>
+  <text x="52" y="274" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#a78bfa">replay.kc</text>
+  <text x="52" y="298" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">ring buffer · sum tree</text></g>
+<g><rect x="810" y="240" width="240" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="810" y="240" width="5" height="80" rx="2.5" fill="#34d399"/>
+  <text x="832" y="274" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#34d399">models/</text>
+  <text x="832" y="298" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">.kcnn · .json · .metrics.json</text></g>
+<g><rect x="810" y="420" width="240" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="810" y="420" width="5" height="80" rx="2.5" fill="#34d399"/>
+  <text x="832" y="454" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#34d399">server.kc</text>
+  <text x="832" y="478" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">routes · sessions · CSP</text></g>
+<g><rect x="550" y="420" width="200" height="80" rx="14" fill="#111820" stroke="#2a3a4b"/>
+  <rect x="550" y="420" width="5" height="80" rx="2.5" fill="#22d3ee"/>
+  <text x="572" y="454" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#22d3ee">web/</text>
+  <text x="572" y="478" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#7d8ea0">canvas dashboard</text></g>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.2s" begin="0.00s" repeatCount="indefinite" path="M230 100H290"/></circle>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.2s" begin="0.37s" repeatCount="indefinite" path="M490 100H550"/></circle>
+<circle r="3.6" fill="#fbbf24"><animateMotion dur="4.5s" begin="0.74s" repeatCount="indefinite" path="M650 60C650 10 130 10 130 60"/></circle>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.8s" begin="1.11s" repeatCount="indefinite" path="M130 140V240"/></circle>
+<circle r="3.6" fill="#a78bfa"><animateMotion dur="3.6s" begin="1.48s" repeatCount="indefinite" path="M230 280H650V140"/></circle>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.2s" begin="1.85s" repeatCount="indefinite" path="M810 100H750"/></circle>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.8s" begin="2.22s" repeatCount="indefinite" path="M910 140V240"/></circle>
+<circle r="3.6" fill="#a5f3fc"><animateMotion dur="2.8s" begin="2.59s" repeatCount="indefinite" path="M910 320V420"/></circle>
+<circle r="3.6" fill="#34d399"><animateMotion dur="2.2s" begin="2.96s" repeatCount="indefinite" path="M810 460H750"/></circle>
+</svg>

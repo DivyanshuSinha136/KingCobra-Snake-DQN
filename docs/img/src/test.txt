@@ -1,0 +1,30 @@
+$ make test
+kingcobra test tests/
+tests/test_agent.kc
+  ok   test_td_error_matches_reference_double
+  ok   test_plain_dqn_uses_max
+  ok   test_learning_reduces_loss_on_fixed_batch
+  ok   test_loss_only_counts_the_taken_action
+  ok   test_importance_weights_scale_the_error
+  ok   test_soft_and_hard_target_updates
+  ok   test_save_and_load_round_trip
+tests/test_config.kc
+  ok   test_defaults_validate
+  ok   test_set_path_converts_types
+  ok   test_unknown_keys_are_errors
+  ok   test_validation_rejects_nonsense
+tests/test_env.kc
+  ok   test_initial_state
+  ok   test_move_straight_keeps_length
+  ok   test_turns
+  ok   test_eating_grows_and_scores
+  ok   test_wall_death
+  ok   test_self_collision
+  ok   test_tail_cell_is_free_when_not_eating
+  ok   test_starvation
+  ok   test_win_on_full_board
+  ok   test_shaping_sign
+  ...
+  ok   test_n_step_window_emits_discounted_return
+  ok   test_evaluate_reports_consistent_numbers
+48 passed, 0 failed  (379 ms)

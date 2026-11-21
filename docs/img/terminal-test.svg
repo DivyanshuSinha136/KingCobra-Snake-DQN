@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="688" viewBox="0 0 940 688" role="img" aria-label="make test — kingcobra-snake-dqn">
+<rect width="940" height="688" rx="14" fill="#0b1118"/><rect x="0.5" y="0.5" width="939" height="687" rx="13.5" fill="none" stroke="#2a3a4b"/>
+<path d="M0 14a14 14 0 0 1 14-14h912a14 14 0 0 1 14 14v30H0z" fill="#121b25"/><path d="M0 44H940" stroke="#2a3a4b"/>
+<circle cx="26" cy="22" r="6" fill="#f43f5e"/><circle cx="48" cy="22" r="6" fill="#fbbf24"/><circle cx="70" cy="22" r="6" fill="#34d399"/>
+<text x="470" y="27" text-anchor="middle" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">make test — kingcobra-snake-dqn</text>
+<g font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.5" xml:space="preserve">
+<text x="24" y="72" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">$</tspan><tspan fill="#d3deea"> make test</tspan></text>
+<text x="24" y="92" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">kingcobra test tests/</tspan></text>
+<text x="24" y="112" xml:space="preserve" style="white-space:pre"><tspan fill="#d3deea">tests/test_agent.kc</tspan></text>
+<text x="24" y="132" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_td_error_matches_reference_double</tspan></text>
+<text x="24" y="152" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_plain_dqn_uses_max</tspan></text>
+<text x="24" y="172" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_learning_reduces_loss_on_fixed_batch</tspan></text>
+<text x="24" y="192" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_loss_only_counts_the_taken_action</tspan></text>
+<text x="24" y="212" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_importance_weights_scale_the_error</tspan></text>
+<text x="24" y="232" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_soft_and_hard_target_updates</tspan></text>
+<text x="24" y="252" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_save_and_load_round_trip</tspan></text>
+<text x="24" y="272" xml:space="preserve" style="white-space:pre"><tspan fill="#d3deea">tests/test_config.kc</tspan></text>
+<text x="24" y="292" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_defaults_validate</tspan></text>
+<text x="24" y="312" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_set_path_converts_types</tspan></text>
+<text x="24" y="332" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_unknown_keys_are_errors</tspan></text>
+<text x="24" y="352" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_validation_rejects_nonsense</tspan></text>
+<text x="24" y="372" xml:space="preserve" style="white-space:pre"><tspan fill="#d3deea">tests/test_env.kc</tspan></text>
+<text x="24" y="392" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_initial_state</tspan></text>
+<text x="24" y="412" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_move_straight_keeps_length</tspan></text>
+<text x="24" y="432" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_turns</tspan></text>
+<text x="24" y="452" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_eating_grows_and_scores</tspan></text>
+<text x="24" y="472" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_wall_death</tspan></text>
+<text x="24" y="492" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_self_collision</tspan></text>
+<text x="24" y="512" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_tail_cell_is_free_when_not_eating</tspan></text>
+<text x="24" y="532" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_starvation</tspan></text>
+<text x="24" y="552" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_win_on_full_board</tspan></text>
+<text x="24" y="572" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_shaping_sign</tspan></text>
+<text x="24" y="592" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">  ...</tspan></text>
+<text x="24" y="612" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_n_step_window_emits_discounted_return</tspan></text>
+<text x="24" y="632" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">  ok</tspan><tspan fill="#7d8ea0">   test_evaluate_reports_consistent_numbers</tspan></text>
+<text x="24" y="652" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399" font-weight="700">48 passed, 0 failed  (379 ms)</tspan></text>
+<rect x="24" y="659" width="8" height="15" fill="#22d3ee"><animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.1s" repeatCount="indefinite"/></rect></g>
+</svg>

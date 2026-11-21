@@ -1,0 +1,17 @@
+$ make train
+kingcobra run src/main.kc train
+== KingCobra Snake DQN: training ==
+board 10x10  network [19, 96, 96, 3] (11523 parameters)  seed 42
+algorithm: Double DQN, 3-step returns, huber loss, uniform replay (30000), batch 64
+
+ep  100/800 | eps 0.78 | train   0.3 | loss 0.0150 |   687 steps/s | EVAL mean 3.70 max 12
+ep  200/800 | eps 0.57 | train   1.4 | loss 0.0216 |   668 steps/s | EVAL mean 7.40 max 15
+ep  300/800 | eps 0.35 | train   2.7 | loss 0.0285 |   667 steps/s | EVAL mean 12.90 max 20
+ep  400/800 | eps 0.13 | train   5.4 | loss 0.0355 |   642 steps/s | EVAL mean 19.70 max 31
+ep  500/800 | eps 0.02 | train  20.6 | loss 0.0352 |   726 steps/s | EVAL mean 31.50 max 44
+ep  650/800 | eps 0.02 | train  24.0 | loss 0.0200 |   764 steps/s | EVAL mean 36.60 max 44  * best
+ep  800/800 | eps 0.02 | train  19.0 | loss 0.0186 |   749 steps/s | EVAL mean 31.80 max 44
+
+best checkpoint: episode 650 (eval mean 36.60); final evaluation over 100 games...
+final: mean score 33.12 +/- 6.90, max 50, mean length 36.1  (122.2 s)
+saved: models/snake_ddqn.kcnn

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="170" viewBox="0 0 1280 170" role="img" aria-label="Results: mean score 33.1, best game 50, 11523 parameters, 2.0 minutes training">
+<defs><linearGradient id="rs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131c26"/><stop offset="1" stop-color="#0e151d"/></linearGradient></defs>
+<g transform="translate(2 0)"><rect x="0.5" y="0.5" width="304" height="168" rx="16" fill="url(#rs)" stroke="#2a3a4b"/>
+  <rect x="24" y="26" width="30" height="4" rx="2" fill="#22d3ee"/>
+  <text x="24" y="92" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="52" font-weight="700" fill="#22d3ee">33.1<animate attributeName="opacity" values="0;1" dur="0.6s" begin="0s" fill="freeze"/></text>
+  <text x="24" y="122" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#d3deea" letter-spacing="1.2">MEAN SCORE</text>
+  <text x="24" y="148" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">±6.9 over 100 greedy games</text></g><g transform="translate(324 0)"><rect x="0.5" y="0.5" width="304" height="168" rx="16" fill="url(#rs)" stroke="#2a3a4b"/>
+  <rect x="24" y="26" width="30" height="4" rx="2" fill="#34d399"/>
+  <text x="24" y="92" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="52" font-weight="700" fill="#34d399">50<animate attributeName="opacity" values="0;1" dur="0.6s" begin="0.15s" fill="freeze"/></text>
+  <text x="24" y="122" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#d3deea" letter-spacing="1.2">BEST GAME</text>
+  <text x="24" y="148" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">10×10 board</text></g><g transform="translate(646 0)"><rect x="0.5" y="0.5" width="304" height="168" rx="16" fill="url(#rs)" stroke="#2a3a4b"/>
+  <rect x="24" y="26" width="30" height="4" rx="2" fill="#a78bfa"/>
+  <text x="24" y="92" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="52" font-weight="700" fill="#a78bfa">11.5k<animate attributeName="opacity" values="0;1" dur="0.6s" begin="0.3s" fill="freeze"/></text>
+  <text x="24" y="122" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#d3deea" letter-spacing="1.2">PARAMETERS</text>
+  <text x="24" y="148" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">19 → 96 → 96 → 3</text></g><g transform="translate(968 0)"><rect x="0.5" y="0.5" width="304" height="168" rx="16" fill="url(#rs)" stroke="#2a3a4b"/>
+  <rect x="24" y="26" width="30" height="4" rx="2" fill="#fbbf24"/>
+  <text x="24" y="92" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="52" font-weight="700" fill="#fbbf24">2.0 min<animate attributeName="opacity" values="0;1" dur="0.6s" begin="0.44999999999999996s" fill="freeze"/></text>
+  <text x="24" y="122" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#d3deea" letter-spacing="1.2">TRAINING TIME</text>
+  <text x="24" y="148" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">800 episodes · 1 CPU core</text></g>
+</svg>

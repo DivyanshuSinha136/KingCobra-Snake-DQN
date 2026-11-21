@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="428" viewBox="0 0 940 428" role="img" aria-label="make train — kingcobra-snake-dqn">
+<rect width="940" height="428" rx="14" fill="#0b1118"/><rect x="0.5" y="0.5" width="939" height="427" rx="13.5" fill="none" stroke="#2a3a4b"/>
+<path d="M0 14a14 14 0 0 1 14-14h912a14 14 0 0 1 14 14v30H0z" fill="#121b25"/><path d="M0 44H940" stroke="#2a3a4b"/>
+<circle cx="26" cy="22" r="6" fill="#f43f5e"/><circle cx="48" cy="22" r="6" fill="#fbbf24"/><circle cx="70" cy="22" r="6" fill="#34d399"/>
+<text x="470" y="27" text-anchor="middle" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7d8ea0">make train — kingcobra-snake-dqn</text>
+<g font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.5" xml:space="preserve">
+<text x="24" y="72" xml:space="preserve" style="white-space:pre"><tspan fill="#34d399">$</tspan><tspan fill="#d3deea"> make train</tspan></text>
+<text x="24" y="92" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">kingcobra run src/main.kc train</tspan></text>
+<text x="24" y="112" xml:space="preserve" style="white-space:pre"><tspan fill="#22d3ee" font-weight="700">== KingCobra Snake DQN: training ==</tspan></text>
+<text x="24" y="132" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">board 10x10  network [19, 96, 96, 3] (11523 parameters)  seed 42</tspan></text>
+<text x="24" y="152" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">algorithm: Double DQN, 3-step returns, huber loss, uniform replay (30000), batch 64</tspan></text>
+<text x="24" y="172" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0"></tspan></text>
+<text x="24" y="192" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  100/800 | eps 0.78 | train   0.3 | loss 0.0150 |   687 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 3.70 max 12</tspan></text>
+<text x="24" y="212" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  200/800 | eps 0.57 | train   1.4 | loss 0.0216 |   668 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 7.40 max 15</tspan></text>
+<text x="24" y="232" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  300/800 | eps 0.35 | train   2.7 | loss 0.0285 |   667 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 12.90 max 20</tspan></text>
+<text x="24" y="252" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  400/800 | eps 0.13 | train   5.4 | loss 0.0355 |   642 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 19.70 max 31</tspan></text>
+<text x="24" y="272" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  500/800 | eps 0.02 | train  20.6 | loss 0.0352 |   726 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 31.50 max 44</tspan></text>
+<text x="24" y="292" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  650/800 | eps 0.02 | train  24.0 | loss 0.0200 |   764 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 36.60 max 44</tspan><tspan fill="#fbbf24">  * best</tspan></text>
+<text x="24" y="312" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0">ep  800/800 | eps 0.02 | train  19.0 | loss 0.0186 |   749 steps/s</tspan><tspan fill="#22d3ee"> | EVAL mean 31.80 max 44</tspan></text>
+<text x="24" y="332" xml:space="preserve" style="white-space:pre"><tspan fill="#7d8ea0"></tspan></text>
+<text x="24" y="352" xml:space="preserve" style="white-space:pre"><tspan fill="#a5f3fc">best checkpoint: episode 650 (eval mean 36.60); final evaluation over 100 games...</tspan></text>
+<text x="24" y="372" xml:space="preserve" style="white-space:pre"><tspan fill="#a5f3fc">final: mean score 33.12 +/- 6.90, max 50, mean length 36.1  (122.2 s)</tspan></text>
+<text x="24" y="392" xml:space="preserve" style="white-space:pre"><tspan fill="#a5f3fc">saved: models/snake_ddqn.kcnn</tspan></text>
+<rect x="24" y="399" width="8" height="15" fill="#22d3ee"><animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.1s" repeatCount="indefinite"/></rect></g>
+</svg>
