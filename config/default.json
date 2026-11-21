@@ -1,0 +1,67 @@
+{
+  "seed": 42,
+  "env": {
+    "size": 10,
+    "idle_base": 100,
+    "idle_per_len": 2,
+    "max_steps": 3000
+  },
+  "reward": {
+    "food": 1.0,
+    "death": -1.0,
+    "step": -0.01,
+    "win": 5.0,
+    "shaping": 0.03,
+    "starve": -0.5
+  },
+  "features": {
+    "flood": true
+  },
+  "agent": {
+    "hidden": [
+      96,
+      96
+    ],
+    "activation": "relu",
+    "lr": 0.001,
+    "lr_final": 0.0002,
+    "gamma": 0.95,
+    "n_step": 3,
+    "loss": "huber",
+    "huber_delta": 1.0,
+    "clip_norm": 10.0,
+    "double": true,
+    "target_tau": 0.01,
+    "target_hard_every": 0
+  },
+  "replay": {
+    "capacity": 30000,
+    "batch": 64,
+    "warmup": 1000,
+    "prioritized": false,
+    "alpha": 0.6,
+    "beta_start": 0.4
+  },
+  "train": {
+    "episodes": 800,
+    "learn_every": 1,
+    "eps_start": 1.0,
+    "eps_end": 0.02,
+    "eps_decay_episodes": 450,
+    "eval_every": 50,
+    "eval_episodes": 10,
+    "final_eval_episodes": 100,
+    "log_every": 25,
+    "target_score": null,
+    "out_dir": "models",
+    "name": "snake_ddqn"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "max_sessions": 64,
+    "benchmark_max": 50,
+    "allow_shutdown": false,
+    "log": true
+  }
+}
