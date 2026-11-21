@@ -1,0 +1,83 @@
+// util.kc - small numeric and filesystem helpers shared by every module.
+//
+// All randomness in the project flows through nn's single generator, so `nn.seed(n)` makes a whole
+// training run (weights, exploration, food placement, replay sampling) reproducible.
+import std.nn;
+import std.system;
+
+/// Uniform random float in [0, 1).
+fn rnd() -> float {
+    let t = nn.rand([1]);
+    let v = nn.item(t);
+    nn.free(t);
+    return v;
+}
+
+/// Uniform random integer in [0, n).
+fn below(n: int) -> int {
+    let v = int(rnd() * n);
+    if (v >= n) { return n - 1; }
+    return v;
+}
+
+/// Index of the largest element (first one wins ties).
+fn argmax(a: array) -> int {
+    var best = 0;
+    for (i in 1..len(a)) {
+        if (a[i] > a[best]) { best = i; }
+    }
+    return best;
+}
+
+fn clamp(x: float, lo: float, hi: float) -> float {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+fn mean(a: array) -> float {
+    if (len(a) == 0) { return 0.0; }
+    var s = 0.0;
+    for (x in a) { s += x; }
+    return s / len(a);
+}
+
+/// Population standard deviation.
+fn stddev(a: array) -> float {
+    if (len(a) == 0) { return 0.0; }
+    let m = mean(a);
+    var s = 0.0;
+    for (x in a) { s += (x - m) * (x - m); }
+    return sqrt(s / len(a));
+}
+
+fn max_of(a: array) -> float {
+    if (len(a) == 0) { return 0.0; }
+    var m = a[0];
+    for (x in a) { if (x > m) { m = x; } }
+    return m;
+}
+
+/// Mean of the last `k` entries.
+fn tail_mean(a: array, k: int) -> float {
+    let n = len(a);
+    if (n == 0) { return 0.0; }
+    var start = n - k;
+    if (start < 0) { start = 0; }
+    return mean(a.slice(start, n));
+}
+
+/// Fixed-point float formatting: fmt(3.14159, 2) -> "3.14".
+fn fmt(x: float, digits: int = 2) -> string {
+    return format("%." + str(digits) + "f", x);
+}
+
+/// Create a directory (and parents) if it does not exist yet.
+fn ensure_dir(path: string) {
+    if (!system.exists(path)) { system.mkdir(path, true); }
+}
+
+/// Raise an error whose `.message` can be read in a catch block (a bare `throw "text"` would throw a string).
+fn fail(message: string) {
+    throw { message: message };
+}

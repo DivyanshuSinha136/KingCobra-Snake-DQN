@@ -1,0 +1,91 @@
+// Feature encoder: shape, egocentric semantics, flood fill.
+import "../src/env.kc" as env;
+import "../src/features.kc" as ft;
+
+fn idx(name: string) -> int { return ft.NAMES.index_of(name); }
+
+fn test_dimension_and_names() {
+    let g = env.new_game(10);
+    assert_eq(len(ft.encode(g)), ft.DIM);
+    assert_eq(len(ft.NAMES), ft.DIM);
+}
+
+fn test_food_is_relative_to_heading() {
+    let g = env.new_game(10);          // head (5,5) heading right
+    g["food"] = [5, 8];                // straight ahead
+    var f = ft.encode(g);
+    assert_eq(f[idx("food_ahead")], 1.0);
+    assert_eq(f[idx("food_left")], 0.0);
+    assert_eq(f[idx("food_right")], 0.0);
+    g["food"] = [2, 5];                // above: to the LEFT when heading right
+    f = ft.encode(g);
+    assert_eq(f[idx("food_left")], 1.0);
+    assert_eq(f[idx("food_right")], 0.0);
+    g["food"] = [8, 4];                // below and behind: right side, behind
+    f = ft.encode(g);
+    assert_eq(f[idx("food_right")], 1.0);
+    assert_eq(f[idx("food_behind")], 1.0);
+}
+
+fn test_rotation_equivariance() {
+    // the same situation seen after turning must give the same relative features
+    let a = env.new_game(10);
+    a["food"] = [5, 8];                // ahead while heading right
+    let b = env.new_game(10);
+    b["snake"] = [[5, 5], [6, 5], [7, 5]];   // heading up
+    b["occ"] = [0; 100];
+    for (s in b["snake"]) { b["occ"][s[0] * 10 + s[1]] = 1; }
+    b["dir"] = 0;
+    b["food"] = [2, 5];                // ahead while heading up
+    let fa = ft.encode(a);
+    let fb = ft.encode(b);
+    for (n in ["danger_left", "danger_straight", "danger_right", "food_ahead", "food_behind", "food_left", "food_right", "food_dist"]) {
+        assert_eq(fa[idx(n)], fb[idx(n)]);
+    }
+}
+
+fn test_danger_flags() {
+    let g = env.new_game(10);
+    g["snake"] = [[0, 5], [1, 5], [2, 5]];    // head on the top edge heading up
+    g["occ"] = [0; 100];
+    for (s in g["snake"]) { g["occ"][s[0] * 10 + s[1]] = 1; }
+    g["dir"] = 0;
+    g["food"] = [9, 9];
+    let f = ft.encode(g);
+    assert_eq(f[idx("danger_straight")], 1.0);
+    assert_eq(f[idx("danger_left")], 0.0);
+    assert_eq(f[idx("danger_right")], 0.0);
+    assert_eq(f[idx("ray_straight")], 0.0);
+}
+
+fn test_flood_fill_counts_pocket() {
+    // 5x5 board with the snake walling off a 2-cell pocket in the top-left corner
+    let g = env.new_game(5);
+    g["snake"] = [[1, 1], [1, 0], [0, 2], [1, 2], [2, 2], [2, 1], [2, 0]];
+    g["occ"] = [0; 25];
+    for (s in g["snake"]) { g["occ"][s[0] * 5 + s[1]] = 1; }
+    g["dir"] = 0;
+    g["food"] = [4, 4];
+    // from (0,1): reaches (0,1),(0,0) only
+    assert_eq(ft.flood_area(g, 0, 1), 2);
+    // from an open cell: all free cells + tail cell, counted once
+    assert(ft.flood_area(g, 4, 4) > 10);
+    assert_eq(ft.flood_area(g, 1, 2), 0);     // body cell
+}
+
+fn test_flood_can_be_disabled() {
+    let g = env.new_game(10);
+    let f = ft.encode(g, false);
+    assert_eq(f[idx("space_left")], 0.0);
+    assert_eq(f[idx("space_straight")], 0.0);
+    let f2 = ft.encode(g, true);
+    assert(f2[idx("space_straight")] > 0.9);
+}
+
+fn test_values_are_normalised() {
+    for (k in 0..20) {
+        let g = env.new_game(10);
+        for (i in 0..5) { if (!g["done"]) { env.step(g, i % 3, { food: 1.0, death: -1.0, step: 0.0, win: 5.0, shaping: 0.0, starve: -0.5 }); } }
+        for (v in ft.encode(g)) { assert(v >= 0.0 && v <= 1.0); }
+    }
+}

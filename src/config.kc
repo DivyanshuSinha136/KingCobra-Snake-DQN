@@ -1,0 +1,98 @@
+// config.kc - hyper-parameters: built-in defaults, an optional JSON file on top, command-line overrides on top of
+// that, and validation. Every tunable number in the project lives here (and is documented in docs/TRAINING.md).
+import std.json;
+import std.io;
+import "util.kc" as util;
+
+/// The built-in defaults. `config/default.json` mirrors this object.
+fn defaults() -> object {
+    return {
+        seed: 42,
+        env: { size: 10, idle_base: 100, idle_per_len: 2, max_steps: 3000 },
+        reward: { food: 1.0, death: -1.0, step: -0.01, win: 5.0, shaping: 0.03, starve: -0.5 },
+        features: { flood: true },
+        agent: {
+            hidden: [96, 96], activation: "relu", lr: 0.001, lr_final: 0.0002, gamma: 0.95, n_step: 3,
+            loss: "huber", huber_delta: 1.0, clip_norm: 10.0, double: true,
+            target_tau: 0.01, target_hard_every: 0
+        },
+        replay: { capacity: 30000, batch: 64, warmup: 1000, prioritized: false, alpha: 0.6, beta_start: 0.4 },
+        train: {
+            episodes: 800, learn_every: 1, eps_start: 1.0, eps_end: 0.02, eps_decay_episodes: 450,
+            eval_every: 50, eval_episodes: 10, final_eval_episodes: 100, log_every: 25,
+            target_score: null, out_dir: "models", name: "snake_ddqn"
+        },
+        server: { host: "127.0.0.1", port: 8765, max_sessions: 64, benchmark_max: 50, allow_shutdown: false, log: true }
+    };
+}
+
+/// Recursively copy `over` onto `base` (objects merge, everything else replaces). Unknown keys are an error so a
+/// typo in a config file can never silently fall back to a default.
+fn merge(base: object, over: object, path: string = "") {
+    for (k in keys(over)) {
+        let here = path + k;
+        var known = false;
+        for (bk in keys(base)) { if (bk == k) { known = true; } }
+        if (!known) { util.fail("unknown config key '" + here + "'"); }
+        if (typeof(base[k]) == "object" && typeof(over[k]) == "object") {
+            merge(base[k], over[k], here + ".");
+        } else {
+            base[k] = over[k];
+        }
+    }
+}
+
+fn require(cond: bool, msg: string) {
+    if (!cond) { util.fail("invalid config: " + msg); }
+}
+
+/// Throws a descriptive error if the configuration cannot work.
+fn validate(c: object) {
+    require(c["env"]["size"] >= 4 && c["env"]["size"] <= 40, "env.size must be between 4 and 40");
+    require(c["agent"]["gamma"] > 0.0 && c["agent"]["gamma"] < 1.0, "agent.gamma must be in (0, 1)");
+    require(c["agent"]["n_step"] >= 1 && c["agent"]["n_step"] <= 10, "agent.n_step must be between 1 and 10");
+    require(len(c["agent"]["hidden"]) >= 1, "agent.hidden needs at least one layer");
+    require(c["agent"]["lr"] > 0.0, "agent.lr must be positive");
+    require(c["agent"]["target_tau"] > 0.0 && c["agent"]["target_tau"] <= 1.0, "agent.target_tau must be in (0, 1]");
+    require(c["replay"]["batch"] >= 8, "replay.batch must be at least 8");
+    require(c["replay"]["capacity"] >= c["replay"]["batch"] * 4, "replay.capacity must hold at least 4 batches");
+    require(c["replay"]["warmup"] >= c["replay"]["batch"], "replay.warmup must be at least replay.batch");
+    require(c["train"]["episodes"] >= 1, "train.episodes must be at least 1");
+    require(c["train"]["eps_start"] >= c["train"]["eps_end"], "train.eps_start must be >= train.eps_end");
+    require(c["train"]["learn_every"] >= 1, "train.learn_every must be at least 1");
+    require(c["server"]["port"] >= 0 && c["server"]["port"] <= 65535, "server.port must be 0..65535");
+}
+
+/// Load a JSON config file over the defaults.
+fn load(path: string) -> object {
+    let c = defaults();
+    if (path != "") {
+        if (!io.exists(path)) { util.fail("config file not found: " + path); }
+        let over = json.try_parse(io.read_file(path), null);
+        if (over == null || typeof(over) != "object") { util.fail("config file is not a JSON object: " + path); }
+        merge(c, over);
+    }
+    validate(c);
+    return c;
+}
+
+/// Set one value by dotted path ("train.episodes"), converting the text to the existing value's type.
+fn set_path(c: object, dotted: string, text: string) {
+    let parts = dotted.split(".");
+    var node = c;
+    for (i in 0..len(parts) - 1) {
+        if (typeof(node) != "object" || node[parts[i]] == null) { util.fail("unknown config key '" + dotted + "'"); }
+        node = node[parts[i]];
+    }
+    let last = parts[len(parts) - 1];
+    var known = false;
+    for (bk in keys(node)) { if (bk == last) { known = true; } }
+    if (!known) { util.fail("unknown config key '" + dotted + "'"); }
+    let cur = node[last];
+    if (typeof(cur) == "bool") { node[last] = (text == "true" || text == "1"); }
+    else if (typeof(cur) == "int") { node[last] = int(text); }
+    else if (typeof(cur) == "float") { node[last] = float(text); }
+    else if (typeof(cur) == "array") { node[last] = json.parse(text); }
+    else if (cur == null) { node[last] = json.try_parse(text, text); }
+    else { node[last] = text; }
+}

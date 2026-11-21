@@ -1,0 +1,241 @@
+// trainer.kc - the training loop, greedy evaluation and checkpointing.
+//
+// Training is episodic: act epsilon-greedily, push n-step transitions into the replay buffer, learn from a sampled
+// minibatch after every step (once the buffer is warm), evaluate the *greedy* policy every few episodes and keep the
+// best checkpoint. Everything that is produced lands in `train.out_dir`:
+//
+//     <name>.kcnn           best network (architecture + weights, CRC-protected KCNN file)
+//     <name>.json           model card: config, features, parameter count, best/final evaluation
+//     <name>.metrics.json   learning curves for the dashboard
+import std.system;
+import std.json;
+import std.io;
+import std.nn;
+import "util.kc" as util;
+import "env.kc" as env;
+import "features.kc" as features;
+import "replay.kc" as replay;
+import "agent.kc" as agent;
+
+fn new_env(cfg: object) -> object {
+    let e = cfg["env"];
+    return env.new_game(e["size"], e["idle_base"], e["idle_per_len"], e["max_steps"]);
+}
+
+/// Play `episodes` full games with the greedy policy. Returns summary statistics.
+fn evaluate(ag: object, cfg: object, episodes: int) -> object {
+    let scores = [];
+    let lengths = [];
+    var walls = 0;
+    var selfs = 0;
+    var starved = 0;
+    var wins = 0;
+    let flood = cfg["features"]["flood"];
+    for (i in 0..episodes) {
+        let g = new_env(cfg);
+        while (!g["done"]) {
+            let a = agent.act_greedy(ag, features.encode(g, flood));
+            env.step(g, a, cfg["reward"]);
+        }
+        scores.push(g["score"]);
+        lengths.push(len(g["snake"]));
+        if (g["cause"] == "wall") { walls += 1; }
+        if (g["cause"] == "self") { selfs += 1; }
+        if (g["cause"] == "starved") { starved += 1; }
+        if (g["cause"] == "win") { wins += 1; }
+    }
+    return {
+        episodes: episodes, mean: util.mean(scores), max: util.max_of(scores), std: util.stddev(scores),
+        mean_length: util.mean(lengths), scores: scores,
+        deaths: { wall: walls, self: selfs, starved: starved, win: wins }
+    };
+}
+
+/// Emit one (possibly truncated) n-step transition from the window `w` of [s, a, r, s2, d] steps.
+fn emit(rb: object, w: array, first: int, gamma: float) {
+    var ret = 0.0;
+    var disc = 1.0;
+    
+    for (i in first..len(w)) {
+        ret += disc * w[i][2];
+        disc = disc * gamma;
+    }
+    let last = w[len(w) - 1];
+    replay.add(rb, w[first][0], w[first][1], ret, last[3], last[4], disc);
+}
+
+/// Atomic JSON write (temp file + rename) so a crash never leaves a half-written file behind.
+fn write_json(path: string, value) {
+    let tmp = path + ".tmp";
+    io.write_file(tmp, json.stringify(value));
+    system.rename(tmp, path);
+}
+
+fn paths(cfg: object) -> object {
+    let dir = cfg["train"]["out_dir"];
+    let name = cfg["train"]["name"];
+    return {
+        dir: dir,
+        model: system.path_join(dir, name + ".kcnn"),
+        card: system.path_join(dir, name + ".json"),
+        metrics: system.path_join(dir, name + ".metrics.json")
+    };
+}
+
+/// Run a full training session. Returns { agent, history, card }.
+fn train(cfg: object, verbose: bool = true) -> object {
+    let tc = cfg["train"];
+    let ac = cfg["agent"];
+    let rc = cfg["replay"];
+    let flood = cfg["features"]["flood"];
+    let p = paths(cfg);
+    util.ensure_dir(p["dir"]);
+
+    nn.seed(cfg["seed"]);
+    let ag = agent.create(features.DIM, ac);
+    let rb = replay.create(rc["capacity"], rc["prioritized"], rc["alpha"]);
+    let n_step = ac["n_step"];
+    let gamma = ac["gamma"];
+
+    if (verbose) {
+        print("== KingCobra Snake DQN: training ==");
+        print(f"board {cfg["env"]["size"]}x{cfg["env"]["size"]}  network {ag["sizes"]} ({agent.param_count(ag)} parameters)  seed {cfg["seed"]}");
+        print(f"algorithm: {if_str(ac["double"], "Double DQN", "DQN")}, {n_step}-step returns, {ac["loss"]} loss, " +
+              f"{if_str(rc["prioritized"], "prioritised", "uniform")} replay ({rc["capacity"]}), batch {rc["batch"]}");
+        print("");
+    }
+
+    let history = [];
+    let scores = [];
+    let returns = [];
+    let losses = [];
+    var total_steps = 0;
+    var best_eval = -1.0;
+    var best_episode = 0;
+    var good_evals = 0;
+    var last_eval = null;
+    var episodes_done = 0;
+    let t0 = system.monotonic();
+    var chunk_t = t0;
+    var chunk_steps = 0;
+
+    for (ep in 1..tc["episodes"] + 1) {
+        // schedules
+        var eps = tc["eps_start"] - (tc["eps_start"] - tc["eps_end"]) * (ep - 1) / tc["eps_decay_episodes"];
+        if (eps < tc["eps_end"]) { eps = tc["eps_end"]; }
+        if (tc["episodes"] > 1) {
+            nn.set_lr(ag["opt"], ac["lr"] + (ac["lr_final"] - ac["lr"]) * (ep - 1) / (tc["episodes"] - 1));
+        }
+        let beta = rc["beta_start"] + (1.0 - rc["beta_start"]) * (ep - 1) / tc["episodes"];
+
+        let g = new_env(cfg);
+        var s = features.encode(g, flood);
+        let window = [];
+        var ep_return = 0.0;
+        while (!g["done"]) {
+            let a = agent.act(ag, s, eps);
+            let r = env.step(g, a, cfg["reward"]);
+            let s2 = features.encode(g, flood);
+            var terminal = 0;
+            if (g["done"] && g["cause"] != "timeout") { terminal = 1; }
+            window.push([s, a, r, s2, terminal]);
+            if (len(window) == n_step) {
+                emit(rb, window, 0, gamma);
+                window.remove(0);
+            }
+            if (g["done"]) {
+                for (j in 0..len(window)) { emit(rb, window, j, gamma); }
+            }
+            ep_return += r;
+            s = s2;
+            total_steps += 1;
+            chunk_steps += 1;
+
+            if (replay.size(rb) >= rc["warmup"] && total_steps % tc["learn_every"] == 0) {
+                let batch = replay.sample(rb, rc["batch"], beta);
+                let res = agent.learn(ag, batch);
+                replay.update_priorities(rb, batch["idx"], res["td"]);
+                losses.push(res["loss"]);
+                if (len(losses) > 500) { losses.remove(0); }
+            }
+        }
+        scores.push(g["score"]);
+        returns.push(ep_return);
+        episodes_done = ep;
+
+        // periodic greedy evaluation + checkpointing
+        var did_eval = false;
+        if (ep % tc["eval_every"] == 0 || ep == tc["episodes"]) {
+            last_eval = evaluate(ag, cfg, tc["eval_episodes"]);
+            did_eval = true;
+            if (last_eval["mean"] > best_eval) {
+                best_eval = last_eval["mean"];
+                best_episode = ep;
+                agent.save(ag, p["model"]);
+            }
+            if (tc["target_score"] != null && last_eval["mean"] >= tc["target_score"]) { good_evals += 1; } else { good_evals = 0; }
+        }
+
+        if (ep % tc["log_every"] == 0 || did_eval || ep == tc["episodes"]) {
+            let now = system.monotonic();
+            var sps = 0.0;
+            if (now > chunk_t) { sps = chunk_steps / (now - chunk_t); }
+            var evm = null;
+            var evx = null;
+            if (did_eval) { evm = last_eval["mean"]; evx = last_eval["max"]; }
+            let row = {
+                episode: ep, steps: total_steps, epsilon: eps,
+                train_score: util.tail_mean(scores, 25), train_return: util.tail_mean(returns, 25),
+                loss: util.tail_mean(losses, 100), eval_mean: evm, eval_max: evx,
+                seconds: now - t0, steps_per_sec: sps
+            };
+            history.push(row);
+            if (verbose) {
+                var line = f"ep {str(ep).pad_left(4, " ")}/{tc["episodes"]} | eps {util.fmt(eps)} | train {util.fmt(row["train_score"], 1).pad_left(5, " ")}" +
+                           f" | loss {util.fmt(row["loss"], 4)} | {util.fmt(sps, 0).pad_left(5, " ")} steps/s";
+                if (did_eval) { line += f" | EVAL mean {util.fmt(evm, 2)} max {util.fmt(evx, 0)}"; if (ep == best_episode) { line += "  * best"; } }
+                print(line);
+            }
+            chunk_t = now;
+            chunk_steps = 0;
+            write_json(p["metrics"], { history: history, name: tc["name"], episodes_done: ep });
+        }
+        if (good_evals >= 2) {
+            if (verbose) { print(f"target score {tc["target_score"]} reached twice in a row; stopping early at episode {ep}"); }
+            break;
+        }
+    }
+
+    // reload the best checkpoint and measure it properly
+    var best = ag;
+    if (io.exists(p["model"])) { best = agent.load(p["model"], features.DIM, ac); }
+    if (verbose) { print(""); print(f"best checkpoint: episode {best_episode} (eval mean {util.fmt(best_eval)}); final evaluation over {tc["final_eval_episodes"]} games..."); }
+    let final_eval = evaluate(best, cfg, tc["final_eval_episodes"]);
+    let seconds = system.monotonic() - t0;
+
+    // the card travels with the model: keep machine-specific paths out of it
+    let shared_cfg = json.parse(json.stringify(cfg));
+    shared_cfg["train"]["out_dir"] = "models";
+    let card = {
+        name: tc["name"], algorithm: if_str(ac["double"], "Double DQN", "DQN"), version: 1,
+        trained_at: system.time(), train_seconds: seconds, episodes: episodes_done, total_steps: total_steps,
+        seed: cfg["seed"], board: cfg["env"]["size"], input_dim: features.DIM, features: features.NAMES,
+        network: ag["sizes"], parameters: agent.param_count(ag), actions: env.ACTION_NAMES,
+        best_episode: best_episode, best_eval_mean: best_eval,
+        final_eval: { episodes: final_eval["episodes"], mean: final_eval["mean"], max: final_eval["max"], std: final_eval["std"],
+                      mean_length: final_eval["mean_length"], deaths: final_eval["deaths"] },
+        config: shared_cfg
+    };
+    write_json(p["card"], card);
+    if (verbose) {
+        print(f"final: mean score {util.fmt(final_eval["mean"])} +/- {util.fmt(final_eval["std"])}, max {util.fmt(final_eval["max"], 0)}, " +
+              f"mean length {util.fmt(final_eval["mean_length"], 1)}  ({util.fmt(seconds, 1)} s)");
+        print(f"saved: {p["model"]}");
+    }
+    return { agent: best, history: history, card: card };
+}
+
+fn if_str(cond: bool, a: string, b: string) -> string {
+    if (cond) { return a; }
+    return b;
+}

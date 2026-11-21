@@ -1,0 +1,41 @@
+import "../src/config.kc" as config;
+
+fn test_defaults_validate() {
+    config.validate(config.defaults());
+}
+
+fn test_set_path_converts_types() {
+    let c = config.defaults();
+    config.set_path(c, "train.episodes", "12");
+    config.set_path(c, "agent.lr", "0.5");
+    config.set_path(c, "agent.double", "false");
+    config.set_path(c, "agent.hidden", "[8, 8]");
+    config.set_path(c, "train.name", "abc");
+    assert_eq(c["train"]["episodes"], 12);
+    assert_eq(c["agent"]["lr"], 0.5);
+    assert_eq(c["agent"]["double"], false);
+    assert_eq(c["agent"]["hidden"], [8, 8]);
+    assert_eq(c["train"]["name"], "abc");
+}
+
+fn test_unknown_keys_are_errors() {
+    var msg = "";
+    try { config.set_path(config.defaults(), "train.episodez", "1"); } catch (e) { msg = e.message; }
+    assert(msg.contains("unknown config key"));
+    msg = "";
+    try { config.merge(config.defaults(), { agent: { lrr: 1 } }); } catch (e) { msg = e.message; }
+    assert(msg.contains("agent.lrr"));
+}
+
+fn test_validation_rejects_nonsense() {
+    var c = config.defaults();
+    c["agent"]["gamma"] = 1.5;
+    var msg = "";
+    try { config.validate(c); } catch (e) { msg = e.message; }
+    assert(msg.contains("gamma"));
+    c = config.defaults();
+    c["env"]["size"] = 2;
+    msg = "";
+    try { config.validate(c); } catch (e) { msg = e.message; }
+    assert(msg.contains("env.size"));
+}

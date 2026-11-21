@@ -1,0 +1,133 @@
+// replay.kc - experience replay: a circular buffer with optional proportional prioritisation.
+//
+// Each transition is stored as (state, action, reward, next_state, done, gamma_k). `gamma_k` is the discount that
+// belongs to the *bootstrap* of that transition: gamma for a 1-step return, gamma^n for an n-step return, and the
+// right smaller power for the short tails that are flushed at the end of an episode.
+//
+// Prioritised mode (Schaul et al., 2016) keeps a sum tree over the priorities p_i = (|td_i| + eps)^alpha so that
+// a transition is drawn with probability p_i / sum(p). Sampling is stratified (one draw per equal slice of the
+// total priority), and importance-sampling weights w_i = (N * P(i))^-beta / max(w) correct the resulting bias.
+import "util.kc" as util;
+
+let PRIORITY_EPS = 0.001;
+
+fn pow2_at_least(n: int) -> int {
+    var p = 1;
+    while (p < n) { p = p * 2; }
+    return p;
+}
+
+/// Create an empty buffer. With `prioritized = true`, `alpha` controls how strongly priorities skew sampling.
+fn create(capacity: int, prioritized: bool = false, alpha: float = 0.6) -> object {
+    let leaves = pow2_at_least(capacity);
+    var tree = [];
+    if (prioritized) { tree = [0.0; 2 * leaves]; }
+    return {
+        capacity: capacity, prioritized: prioritized, alpha: alpha,
+        leaves: leaves, tree: tree, max_priority: 1.0,
+        S: [], A: [], R: [], S2: [], D: [], G: [],
+        head: 0, count: 0
+    };
+}
+
+fn size(rb: object) -> int { return rb["count"]; }
+
+/// Total priority mass (0 for a uniform buffer).
+fn total_priority(rb: object) -> float {
+    if (!rb["prioritized"]) { return 0.0; }
+    return rb["tree"][1];
+}
+
+fn tree_set(rb: object, slot: int, p: float) {
+    let tree = rb["tree"];
+    var i = slot + rb["leaves"];
+    tree[i] = p;
+    i = int(i / 2);
+    while (i >= 1) {
+        tree[i] = tree[2 * i] + tree[2 * i + 1];
+        i = int(i / 2);
+    }
+}
+
+/// Leaf slot whose cumulative-priority interval contains `v`.
+fn tree_find(rb: object, v: float) -> int {
+    let tree = rb["tree"];
+    let leaves = rb["leaves"];
+    var i = 1;
+    var rest = v;
+    while (i < leaves) {
+        let left = 2 * i;
+        if (rest <= tree[left]) {
+            i = left;
+        } else {
+            rest -= tree[left];
+            i = left + 1;
+        }
+    }
+    return i - leaves;
+}
+
+/// Store one transition (overwriting the oldest once full). New transitions get the current max priority so each
+/// one is replayed at least once.
+fn add(rb: object, s: array, a: int, r: float, s2: array, d: int, gk: float) {
+    var slot = rb["head"];
+    if (rb["count"] < rb["capacity"]) {
+        rb["S"].push(s); rb["A"].push(a); rb["R"].push(r);
+        rb["S2"].push(s2); rb["D"].push(d); rb["G"].push(gk);
+        slot = rb["count"];
+        rb["count"] += 1;
+    } else {
+        rb["S"][slot] = s; rb["A"][slot] = a; rb["R"][slot] = r;
+        rb["S2"][slot] = s2; rb["D"][slot] = d; rb["G"][slot] = gk;
+        rb["head"] = (slot + 1) % rb["capacity"];
+    }
+    if (rb["prioritized"]) { tree_set(rb, slot, rb["max_priority"]); }
+}
+
+/// Draw `batch` transitions. Returns { idx, S, A, R, S2, D, G, W } where W holds importance-sampling weights
+/// (or null for a uniform buffer).
+fn sample(rb: object, batch: int, beta: float = 0.4) -> object {
+    let n = rb["count"];
+    let idx = [];
+    var weights = null;
+    if (rb["prioritized"]) {
+        weights = [];
+        let total = rb["tree"][1];
+        let seg = total / batch;
+        var wmax = 0.0;
+        for (k in 0..batch) {
+            var slot = tree_find(rb, (k + util.rnd()) * seg);
+            if (slot >= n) { slot = n - 1; }
+            idx.push(slot);
+            let p = rb["tree"][slot + rb["leaves"]] / total;
+            let w = pow(n * p, -beta);
+            weights.push(w);
+            if (w > wmax) { wmax = w; }
+        }
+        for (k in 0..batch) { weights[k] = weights[k] / wmax; }
+    } else {
+        for (k in 0..batch) { idx.push(util.below(n)); }
+    }
+    let S = [];
+    let A = [];
+    let R = [];
+    let S2 = [];
+    let D = [];
+    let G = [];
+    for (i in idx) {
+        S.push(rb["S"][i]); A.push(rb["A"][i]); R.push(rb["R"][i]);
+        S2.push(rb["S2"][i]); D.push(rb["D"][i]); G.push(rb["G"][i]);
+    }
+    return { idx: idx, S: S, A: A, R: R, S2: S2, D: D, G: G, W: weights };
+}
+
+/// After a learning step, re-prioritise the sampled transitions by their new absolute TD errors.
+fn update_priorities(rb: object, idx: array, td: array) {
+    if (!rb["prioritized"]) { return; }
+    for (k in 0..len(idx)) {
+        let p = pow(abs(td[k]) + PRIORITY_EPS, rb["alpha"]);
+        if (p > rb["max_priority"]) { rb["max_priority"] = p; }
+        tree_set(rb, idx[k], p);
+    }
+    
+}

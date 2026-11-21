@@ -1,0 +1,146 @@
+// The web server, end to end: boot it as a child process and talk to it over real HTTP.
+import std.system;
+import std.io;
+import std.json;
+import std.http;
+import "../src/config.kc" as config;
+import "../src/trainer.kc" as trainer;
+
+var base = "";
+var child = null;
+var tmp = "";
+
+fn boot() {
+    if (child != null) { return; }
+    tmp = system.make_temp_dir("kc_snake_srv_");
+    let c = config.defaults();
+    c["train"]["episodes"] = 4;
+    c["train"]["eval_every"] = 2;
+    c["train"]["eval_episodes"] = 2;
+    c["train"]["final_eval_episodes"] = 2;
+    c["train"]["log_every"] = 2;
+    c["train"]["out_dir"] = tmp;
+    c["replay"]["batch"] = 8;
+    c["replay"]["capacity"] = 64;
+    c["replay"]["warmup"] = 16;
+    c["agent"]["hidden"] = [8];
+    trainer.train(c, false);
+    let portfile = system.path_join(tmp, "port");
+    system.setenv("KC_PORT_FILE", portfile);
+    let here = system.dirname(system.script_path());
+    let main = system.path_join(here, "..", "src", "main.kc");
+    child = system.spawn([system.exe_path(), "run", main, "serve", "--out", tmp, "--port", "0",
+                          "--set", "server.allow_shutdown=true", "--set", "server.log=false"], false);
+    var waited = 0;
+    while (!system.exists(portfile) && waited < 200) { system.sleep(0.05); waited += 1; }
+    assert(system.exists(portfile), "server did not start");
+    base = "http://127.0.0.1:" + io.read_file(portfile);
+}
+
+fn get(path: string) { return http.get(base + path); }
+fn post(path: string, body: string = "") { return http.post(base + path, body, ["Content-Type: application/json"]); }
+
+fn test_a_health_and_static() {
+    boot();
+    let h = get("/api/health");
+    assert_eq(h.status, 200);
+    assert_eq(json.parse(h.body)["status"], "ok");
+    let page = get("/");
+    assert_eq(page.status, 200);
+    assert(page.body.contains("Snake DQN"));
+    assert(http.header(page, "content-security-policy").contains("script-src 'self'"));
+    assert_eq(http.header(page, "x-content-type-options"), "nosniff");
+    let js = get("/static/app.js");
+    assert_eq(js.status, 200);
+    assert(http.header(js, "content-type").contains("javascript"));
+    assert_eq(get("/static/../src/main.kc").status, 404);
+    assert_eq(get("/static/nope.js").status, 404);
+}
+
+fn test_b_state_contract() {
+    let s = json.parse(get("/api/state?sid=t1").body);
+    assert_eq(s["size"], 10);
+    assert_eq(len(s["snake"]), 3);
+    assert_eq(len(s["q"]), 3);
+    assert_eq(len(s["features"]), 19);
+    assert(!s["done"]);
+    assert(s["best_action"] >= 0 && s["best_action"] <= 2);
+}
+
+fn test_c_ai_step_advances_and_reports_decision() {
+    let s0 = json.parse(post("/api/reset?sid=t2").body);
+    let s1 = json.parse(post("/api/ai-step?sid=t2").body);
+    assert_eq(s1["steps"], 1);
+    assert(s1["decision"] != null);
+    assert_eq(len(s1["decision"]["q"]), 3);
+    assert(s1["decision"]["action"] >= 0);
+}
+
+fn test_d_human_actions_and_validation() {
+    post("/api/reset?sid=t3");
+    let a = json.parse(post("/api/human?sid=t3", "{\"dir\":1}").body);      // already heading right
+    assert_eq(a["steps"], 1);
+    assert_eq(a["dir"], 1);
+    let b = json.parse(post("/api/human?sid=t3", "{\"dir\":3}").body);      // reversal is ignored
+    assert_eq(b["dir"], 1);
+    let c = json.parse(post("/api/human?sid=t3", "{\"action\":1}").body);   // turn left -> up
+    assert_eq(c["dir"], 0);
+    assert_eq(post("/api/human?sid=t3", "not json").status, 400);
+    assert_eq(post("/api/human?sid=t3", "{\"action\":7}").status, 400);
+    assert_eq(post("/api/human?sid=t3", "{\"dir\":\"up\"}").status, 400);
+    assert_eq(post("/api/human?sid=t3", "{}").status, 400);
+}
+
+fn test_e_sessions_are_isolated() {
+    post("/api/reset?sid=aaa");
+    post("/api/reset?sid=bbb");
+    post("/api/ai-step?sid=aaa");
+    post("/api/ai-step?sid=aaa");
+    assert_eq(json.parse(get("/api/state?sid=aaa").body)["steps"], 2);
+    assert_eq(json.parse(get("/api/state?sid=bbb").body)["steps"], 0);
+    // a hostile session id falls back to the shared default session instead of creating arbitrary keys
+    assert_eq(get("/api/state?sid=../../etc").status, 200);
+}
+
+fn test_f_game_over_is_sticky_and_counted() {
+    post("/api/reset?sid=die");
+    var s = null;
+    for (i in 0..12) { s = json.parse(post("/api/human?sid=die", "{\"dir\":0}").body); }   // run up into the wall
+    assert(s["done"]);
+    assert_eq(s["cause"], "wall");
+    let steps = s["steps"];
+    let again = json.parse(post("/api/human?sid=die", "{\"dir\":0}").body);
+    assert_eq(again["steps"], steps);                    // frozen after the end
+    assert_eq(again["session"]["games"], 1);
+    post("/api/reset?sid=die");
+    assert_eq(json.parse(get("/api/state?sid=die").body)["session"]["games"], 1);
+}
+
+fn test_g_methods_and_routes() {
+    assert_eq(get("/api/ai-step").status, 405);
+    assert_eq(post("/api/state").status, 405);
+    assert_eq(get("/api/nope").status, 404);
+    assert_eq(get("/nothing").status, 404);
+}
+
+fn test_h_model_metrics_benchmark() {
+    let m = json.parse(get("/api/model").body);
+    assert_eq(m["input_dim"], 19);
+    assert_eq(len(m["features"]), 19);
+    let h = json.parse(get("/api/metrics").body)["history"];
+    assert(len(h) >= 1);
+    let b = json.parse(get("/api/benchmark?episodes=3").body);
+    assert_eq(b["episodes"], 3);
+    assert_eq(len(b["scores"]), 3);
+    assert_eq(b["deaths"]["wall"] + b["deaths"]["self"] + b["deaths"]["starved"] + b["deaths"]["win"], 3);
+    assert_eq(get("/api/benchmark?episodes=0").status, 400);
+    assert_eq(get("/api/benchmark?episodes=9999").status, 400);
+}
+
+fn test_z_shutdown() {
+    assert_eq(post("/api/shutdown").status, 200);
+    let code = system.wait(child, 5.0);
+    assert_eq(code, 0);
+    system.proc_free(child);
+    system.rmdir(tmp, true);
+}

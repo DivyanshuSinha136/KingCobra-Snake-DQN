@@ -1,0 +1,142 @@
+// agent.kc - the (Double) DQN agent: Q-network, target network, optimiser and one vectorised learning step.
+//
+// For a minibatch of transitions (s, a, r, s', d, gamma_k) the regression target of the taken action is
+//
+//     Double DQN :  y = r + gamma_k * (1 - d) * Q_target(s', argmax_a' Q_online(s', a'))
+//     plain DQN  :  y = r + gamma_k * (1 - d) * max_a' Q_target(s', a')          (agent.double = false)
+//
+// The online network picks the action and the target network scores it, which removes the over-estimation bias
+// of plain DQN. Only the taken action's output has a non-zero error; the other two outputs are regressed onto
+// themselves. The whole step is a handful of tensor operations (no per-sample loops in KingCobra), so one update
+// of a batch of 64 costs a fraction of a millisecond.
+import std.nn;
+import "util.kc" as util;
+import "env.kc" as env;
+
+/// Build a fresh agent for `input_dim` features. `ac` is the `agent` section of the config.
+fn create(input_dim: int, ac: object) -> object {
+    var sizes = [input_dim];
+    for (h in ac["hidden"]) { sizes.push(h); }
+    sizes.push(env.N_ACTIONS);
+    let online = nn.mlp(sizes, "activation", ac["activation"]);
+    let target = nn.clone(online);
+    let opt = nn.adam(online, ac["lr"]);
+    var loss = null;
+    if (ac["loss"] == "huber") { loss = nn.loss("huber", "delta", ac["huber_delta"]); }
+    else { loss = nn.loss(ac["loss"]); }
+    return { online: online, target: target, opt: opt, loss: loss, cfg: ac, input_dim: input_dim, sizes: sizes, updates: 0 };
+}
+
+/// Wrap an already trained network (used when loading a checkpoint).
+fn from_network(online, input_dim: int, ac: object) -> object {
+    let opt = nn.adam(online, ac["lr"]);
+    var loss = nn.loss("mse");
+    return { online: online, target: nn.clone(online), opt: opt, loss: loss, cfg: ac, input_dim: input_dim, sizes: [], updates: 0 };
+}
+
+/// Q-values (straight, left, right) for one feature vector.
+fn q_values(ag: object, feats: array) -> array {
+    return nn.predict(ag["online"], [feats])[0];
+}
+
+/// Greedy action.
+fn act_greedy(ag: object, feats: array) -> int {
+    return util.argmax(q_values(ag, feats));
+}
+
+/// Epsilon-greedy action.
+fn act(ag: object, feats: array, eps: float) -> int {
+    if (util.rnd() < eps) { return util.below(env.N_ACTIONS); }
+    return act_greedy(ag, feats);
+}
+
+/// One gradient step on a sampled batch (see replay.sample). Returns
+/// { loss, grad_norm, mean_q, td } where `td` holds the per-sample TD errors (for prioritised replay).
+fn learn(ag: object, b: object) -> object {
+    let ac = ag["cfg"];
+    let S = nn.tensor(b["S"]);
+    let S2 = nn.tensor(b["S2"]);
+    let R = nn.tensor(b["R"]);
+    let D = nn.tensor(b["D"]);
+    let G = nn.tensor(b["G"]);
+    let acts = nn.tensor(b["A"]);
+    let mask = nn.one_hot(acts, env.N_ACTIONS);
+
+    // bootstrap value of the next state
+    let qt_next = nn.forward(ag["target"], S2, false);
+    var sel = null;
+    var qo_next = null;
+    var best = null;
+    var picked = null;
+    if (ac["double"]) {
+        qo_next = nn.forward(ag["online"], S2, false);
+        best = nn.argmax(qo_next, 1);
+        picked = nn.gather(qt_next, nn.unsqueeze(best, 1), 1);
+        sel = nn.squeeze(picked, 1);
+    } else {
+        sel = nn.max(qt_next, 1);
+    }
+    let live = nn.sub(1.0, D);
+    let boot = nn.mul(G, nn.mul(live, sel));
+    let y = nn.add(R, boot);
+
+    // online prediction and the regression target
+    let q = nn.forward(ag["online"], S, true);
+    let qa = nn.sum(nn.mul(q, mask), 1);
+    let td = nn.sub(y, qa);
+    let ycol = nn.unsqueeze(y, 1);
+    let keep = nn.sub(1.0, mask);
+    let target = nn.add(nn.mul(q, keep), nn.mul(mask, ycol));
+
+    // importance-sampling weights: scaling the error by w scales the MSE gradient by w exactly
+    var fit = target;
+    var wt = null;
+    var wcol = null;
+    var diff = null;
+    var scaled = null;
+    if (b["W"] != null) {
+        wt = nn.tensor(b["W"]);
+        wcol = nn.unsqueeze(wt, 1);
+        diff = nn.sub(target, q);
+        scaled = nn.mul(diff, wcol);
+        fit = nn.add(q, scaled);
+    }
+
+    let loss_v = nn.loss_value(ag["loss"], q, fit);
+    nn.zero_grad(ag["online"]);
+    nn.backward(ag["online"], ag["loss"]);
+    var gnorm = 0.0;
+    if (ac["clip_norm"] != null) { gnorm = nn.clip_grad_norm(ag["online"], ac["clip_norm"]); }
+    nn.step(ag["opt"]);
+    ag["updates"] += 1;
+
+    // target network
+    if (ac["target_hard_every"] > 0) {
+        if (ag["updates"] % ac["target_hard_every"] == 0) { nn.copy_weights(ag["target"], ag["online"]); }
+    } else {
+        nn.copy_weights(ag["target"], ag["online"], ac["target_tau"]);
+    }
+
+    let td_arr = nn.to_array(td);
+    let mq = nn.item(nn.mean(q));
+
+    for (t in [S, S2, R, D, G, acts, mask, qt_next, live, boot, y, q, qa, td, ycol, keep, target]) { nn.free(t); }
+    if (ac["double"]) { for (t in [qo_next, best, picked, sel]) { nn.free(t); } } else { nn.free(sel); }
+    if (b["W"] != null) { for (t in [wt, wcol, diff, scaled, fit]) { nn.free(t); } }
+    return { loss: loss_v, grad_norm: gnorm, mean_q: mq, td: td_arr };
+}
+
+/// Save the online network (architecture + weights) to `path`.
+fn save(ag: object, path: string) {
+    nn.save(ag["online"], path);
+}
+
+/// Load a network saved by `save` into a ready-to-use agent.
+fn load(path: string, input_dim: int, ac: object) -> object {
+    return from_network(nn.load(path), input_dim, ac);
+}
+
+/// Total number of trainable parameters.
+fn param_count(ag: object) -> int {
+    return nn.count_params(ag["online"]);
+}

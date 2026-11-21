@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="A Double DQN agent that learned Snake, written in KingCobra. Watch it play, take over, and inspect what the network sees.">
+<title>Snake DQN · KingCobra</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2" y="2" width="28" height="28" rx="8" class="logo-bg"/>
+      <path d="M8 22 H16 V14 H24" class="logo-snake"/>
+      <circle cx="24" cy="14" r="2.2" class="logo-head"/>
+    </svg>
+    <div>
+      <h1>Snake DQN</h1>
+      <p class="tagline">Double DQN agent · trained and served by <span class="accent">KingCobra</span></p>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="modelName" class="pill pill-muted" title="Loaded model">model …</span>
+    <span id="conn" class="pill pill-off" role="status" aria-live="polite">connecting…</span>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- ───────────── board ───────────── -->
+  <section class="card board-card" aria-labelledby="boardTitle">
+    <div class="card-head">
+      <h2 id="boardTitle">Board</h2>
+      <div class="seg" role="group" aria-label="Who plays">
+        <button id="modeAi" class="seg-btn is-on" aria-pressed="true" title="Let the trained network play (M)">AI</button>
+        <button id="modeHuman" class="seg-btn" aria-pressed="false" title="Play yourself (M)">You</button>
+      </div>
+    </div>
+
+    <div class="scoreline" aria-live="polite">
+      <div class="metric"><span class="metric-label">Score</span><span class="metric-value" id="score">0</span></div>
+      <div class="metric"><span class="metric-label">Length</span><span class="metric-value" id="length">3</span></div>
+      <div class="metric"><span class="metric-label">Steps</span><span class="metric-value" id="steps">0</span></div>
+      <div class="metric"><span class="metric-label">Status</span><span class="metric-value metric-status" id="status">ready</span></div>
+    </div>
+
+    <div class="stage">
+      <canvas id="board" width="480" height="480" role="img" aria-label="Snake board"></canvas>
+      <div id="overlay" class="overlay is-hidden" role="dialog" aria-live="assertive">
+        <h3 id="overlayTitle">Game over</h3>
+        <p id="overlayText"></p>
+        <button id="overlayBtn" class="btn btn-primary">Play again</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="btnPlay" class="btn btn-primary" title="Play / pause (Space)">▶ Play</button>
+      <button id="btnStep" class="btn" title="Advance one move (N)">Step</button>
+      <button id="btnReset" class="btn" title="New game (R)">Reset</button>
+      <label class="speed" title="Moves per second ( [ and ] )">
+        <span>Speed</span>
+        <input id="speed" type="range" min="1" max="40" step="1" value="12" aria-label="Moves per second">
+        <output id="speedOut">12/s</output>
+      </label>
+      <label class="check"><input id="autoRestart" type="checkbox" checked> Auto-restart</label>
+    </div>
+    <p class="hint">
+      <kbd>Space</kbd> play/pause · <kbd>N</kbd> step · <kbd>R</kbd> reset · <kbd>M</kbd> AI/You · <kbd>[</kbd><kbd>]</kbd> speed ·
+      <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> steer (takes over from the AI)
+    </p>
+  </section>
+
+  <!-- ───────────── right column ───────────── -->
+  <aside class="col">
+
+    <section class="card" aria-labelledby="qTitle">
+      <div class="card-head"><h2 id="qTitle">What the network wants</h2><span id="policy" class="tag">—</span></div>
+      <div class="qbars" id="qbars">
+        <div class="qrow" data-action="1"><span class="qname">↰ Left</span><div class="qtrack"><div class="qfill"></div></div><span class="qval">—</span></div>
+        <div class="qrow" data-action="0"><span class="qname">↑ Straight</span><div class="qtrack"><div class="qfill"></div></div><span class="qval">—</span></div>
+        <div class="qrow" data-action="2"><span class="qname">↱ Right</span><div class="qtrack"><div class="qfill"></div></div><span class="qval">—</span></div>
+      </div>
+      <p class="muted small">Q(s, a): the discounted reward the network expects from each move. The highlighted bar is the greedy choice.</p>
+    </section>
+
+    <section class="card" aria-labelledby="sessTitle">
+      <div class="card-head"><h2 id="sessTitle">This session</h2></div>
+      <dl class="facts facts-2">
+        <div><dt>Games finished</dt><dd id="sGames">0</dd></div>
+        <div><dt>Session best</dt><dd id="sBest">0</dd></div>
+        <div><dt>Session mean</dt><dd id="sMean">0.0</dd></div>
+        <div><dt>All-time best here</dt><dd id="sAll">0</dd></div>
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="inTitle">
+      <details id="featDetails" open>
+        <summary><h2 id="inTitle">What the network sees</h2><span class="muted small" id="featCount"></span></summary>
+        <div id="features" class="features"></div>
+      </details>
+    </section>
+
+  </aside>
+
+  <!-- ───────────── training curves ───────────── -->
+  <section class="card wide" aria-labelledby="curveTitle">
+    <div class="card-head">
+      <h2 id="curveTitle">Training curves</h2>
+      <div class="legend" id="legend">
+        <span class="lg lg-eval">greedy eval mean</span>
+        <span class="lg lg-train">training score (25-ep avg)</span>
+        <span class="lg lg-eps">epsilon</span>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="curve" width="900" height="300" role="img" aria-label="Training curves"></canvas>
+      <div id="tip" class="tip is-hidden"></div>
+      <p id="curveEmpty" class="muted empty is-hidden">No training metrics found. Run <code>make train</code>.</p>
+    </div>
+  </section>
+
+  <!-- ───────────── model + benchmark ───────────── -->
+  <section class="card" aria-labelledby="modelTitle">
+    <div class="card-head"><h2 id="modelTitle">Model card</h2></div>
+    <dl class="facts" id="modelFacts"></dl>
+    <details class="cfg">
+      <summary>Hyper-parameters</summary>
+      <pre id="cfgDump" class="code"></pre>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="benchTitle">
+    <div class="card-head">
+      <h2 id="benchTitle">Benchmark</h2>
+      <div class="bench-ctl">
+        <select id="benchN" aria-label="Number of games">
+          <option value="10">10 games</option>
+          <option value="20" selected>20 games</option>
+          <option value="50">50 games</option>
+        </select>
+        <button id="btnBench" class="btn">Run</button>
+      </div>
+    </div>
+    <p id="benchHint" class="muted small">Plays fresh greedy games on the server and summarises how the agent performs.</p>
+    <div id="benchOut" class="is-hidden">
+      <dl class="facts facts-4" id="benchFacts"></dl>
+      <h3 class="sub">Score distribution</h3>
+      <div id="hist" class="hist"></div>
+      <h3 class="sub">How games ended</h3>
+      <div id="deaths"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span>Written entirely in <a href="https://github.com/DivyanshuSinha136/KingCobra">KingCobra</a> — environment, replay buffer, Double DQN, HTTP server.</span>
+  <span class="muted">MIT licensed</span>
+</footer>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+// Agent: the vectorised Double-DQN target must equal a straightforward per-sample computation.
+import std.nn;
+import "../src/agent.kc" as agent;
+import "../src/util.kc" as util;
+
+fn tiny_cfg(double: bool) -> object {
+    return {
+        hidden: [8], activation: "relu", lr: 0.01, lr_final: 0.01, gamma: 0.9, n_step: 1,
+        loss: "mse", huber_delta: 1.0, clip_norm: 10.0, double: double, target_tau: 1.0, target_hard_every: 0
+    };
+}
+
+fn random_batch(n: int, dim: int, weights: bool) -> object {
+    let S = nn.to_array(nn.randn([n, dim]));
+    let S2 = nn.to_array(nn.randn([n, dim]));
+    let A = [];
+    let R = [];
+    let D = [];
+    let G = [];
+    for (i in 0..n) { A.push(util.below(3)); R.push(util.rnd()); D.push(util.below(2)); G.push(0.9); }
+    var W = null;
+    if (weights) { W = []; for (i in 0..n) { W.push(0.5 + 0.5 * util.rnd()); } }
+    return { idx: [], S: S, A: A, R: R, S2: S2, D: D, G: G, W: W };
+}
+
+/// Reference: the Double-DQN target of sample i, computed one sample at a time.
+fn reference_target(ag: object, b: object, i: int, double: bool) -> float {
+    let qo = agent.q_values(ag, b["S2"][i]);
+    let qt = nn.predict(ag["target"], [b["S2"][i]])[0];
+    var v = 0.0;
+    if (double) { v = qt[util.argmax(qo)]; } else { v = util.max_of(qt); }
+    return b["R"][i] + b["G"][i] * (1 - b["D"][i]) * v;
+}
+
+fn test_td_error_matches_reference_double() {
+    nn.seed(3);
+    let ag = agent.create(6, tiny_cfg(true));
+    // make online and target differ so Double DQN and plain DQN disagree
+    ag["target"] = nn.mlp([6, 8, 3], "activation", "relu");
+    let b = random_batch(16, 6, false);
+    let expected = [];
+    for (i in 0..16) {
+        let q = agent.q_values(ag, b["S"][i]);
+        expected.push(reference_target(ag, b, i, true) - q[b["A"][i]]);
+    }
+    let r = agent.learn(ag, b);
+    for (i in 0..16) { assert(abs(r["td"][i] - expected[i]) < 1e-9); }
+}
+
+fn test_plain_dqn_uses_max() {
+    nn.seed(4);
+    let ag = agent.create(6, tiny_cfg(false));
+    ag["target"] = nn.mlp([6, 8, 3], "activation", "relu");
+    let b = random_batch(16, 6, false);
+    let expected = [];
+    for (i in 0..16) {
+        let q = agent.q_values(ag, b["S"][i]);
+        expected.push(reference_target(ag, b, i, false) - q[b["A"][i]]);
+    }
+    let r = agent.learn(ag, b);
+    for (i in 0..16) { assert(abs(r["td"][i] - expected[i]) < 1e-9); }
+}
+
+fn test_learning_reduces_loss_on_fixed_batch() {
+    nn.seed(5);
+    let ag = agent.create(6, tiny_cfg(true));
+    let b = random_batch(32, 6, false);
+    for (i in 0..32) { b["D"][i] = 1; }       // terminal: target is just the reward, a fixed regression problem
+    let first = agent.learn(ag, b)["loss"];
+    var last = first;
+    for (k in 0..150) { last = agent.learn(ag, b)["loss"]; }
+    assert(last < first * 0.2);
+}
+
+fn test_loss_only_counts_the_taken_action() {
+    // MSE over a [B,3] output where only the taken action has an error: loss = sum(td^2) / (B * 3)
+    nn.seed(7);
+    let ag = agent.create(6, tiny_cfg(true));
+    let b = random_batch(8, 6, false);
+    let r = agent.learn(ag, b);
+    var sq = 0.0;
+    for (e in r["td"]) { sq += e * e; }
+    assert(abs(r["loss"] - sq / (8 * 3)) < 1e-9);
+}
+
+fn test_importance_weights_scale_the_error() {
+    // with every weight 0.5 the effective error is halved, so the MSE is a quarter of the unweighted one
+    nn.seed(6);
+    let a = agent.create(6, tiny_cfg(true));
+    let b = random_batch(16, 6, false);
+    let plain = agent.learn(a, b)["loss"];
+    nn.seed(6);
+    let c = agent.create(6, tiny_cfg(true));
+    let w = random_batch(16, 6, false);
+    w["S"] = b["S"]; w["S2"] = b["S2"]; w["A"] = b["A"]; w["R"] = b["R"]; w["D"] = b["D"];
+    w["W"] = [0.5; 16];
+    let weighted = agent.learn(c, w)["loss"];
+    assert(abs(weighted - plain / 4.0) < 1e-9);
+}
+
+fn test_soft_and_hard_target_updates() {
+    nn.seed(8);
+    var c = tiny_cfg(true);
+    c["target_tau"] = 0.5;
+    let ag = agent.create(6, c);
+    let x = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+    let b = random_batch(8, 6, false);
+    agent.learn(ag, b);
+    let qo = agent.q_values(ag, x);
+    let qt = nn.predict(ag["target"], [x])[0];
+    var diff = 0.0;
+    for (i in 0..3) { diff += abs(qo[i] - qt[i]); }
+    assert(diff > 0.0);                       // soft update: the target trails the online network
+
+    var h = tiny_cfg(true);
+    h["target_hard_every"] = 1;
+    let ag2 = agent.create(6, h);
+    agent.learn(ag2, b);
+    let a = agent.q_values(ag2, x);
+    let t = nn.predict(ag2["target"], [x])[0];
+    for (i in 0..3) { assert(abs(a[i] - t[i]) < 1e-12); }   // hard update copies exactly
+}
+
+fn test_save_and_load_round_trip() {
+    nn.seed(9);
+    let ag = agent.create(6, tiny_cfg(true));
+    let b = random_batch(16, 6, false);
+    for (i in 0..5) { agent.learn(ag, b); }
+    let path = "/tmp/kc_snake_dqn_test_model.kcnn";
+    agent.save(ag, path);
+    let again = agent.load(path, 6, tiny_cfg(true));
+    let x = [0.3, -0.2, 0.9, 0.0, 1.0, -1.0];
+    let q1 = agent.q_values(ag, x);
+    let q2 = agent.q_values(again, x);
+    for (i in 0..3) { assert_eq(q1[i], q2[i]); }             // bit-for-bit
+}

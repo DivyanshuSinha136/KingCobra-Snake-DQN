@@ -1,0 +1,146 @@
+// Environment rules: movement, collisions, growth, the tail-cell rule, starvation and winning.
+import "../src/env.kc" as env;
+
+let RW = { food: 1.0, death: -1.0, step: -0.01, win: 5.0, shaping: 0.0, starve: -0.5 };
+
+fn put_food(g: object, r: int, c: int) { g["food"] = [r, c]; }
+
+fn test_initial_state() {
+    let g = env.new_game(10);
+    assert_eq(len(g["snake"]), 3);
+    assert_eq(g["snake"][0], [5, 5]);
+    assert_eq(g["dir"], 1);
+    assert_eq(g["occ"].sum(), 3);
+    assert(!g["done"]);
+    assert(!env.blocked(g, g["food"][0], g["food"][1]));
+}
+
+fn test_move_straight_keeps_length() {
+    let g = env.new_game(10);
+    put_food(g, 0, 0);
+    let r = env.step(g, 0, RW);
+    assert_eq(g["snake"][0], [5, 6]);
+    assert_eq(len(g["snake"]), 3);
+    assert_eq(g["occ"].sum(), 3);
+    assert_eq(r, -0.01);
+}
+
+fn test_turns() {
+    assert_eq(env.turn(1, 1), 0);   // heading right, turn left  -> up
+    assert_eq(env.turn(1, 2), 2);   // heading right, turn right -> down
+    assert_eq(env.turn(0, 1), 3);
+    assert_eq(env.turn(3, 2), 0);
+    assert_eq(env.relative_action(1, 1), 0);
+    assert_eq(env.relative_action(1, 0), 1);
+    assert_eq(env.relative_action(1, 2), 2);
+    assert_eq(env.relative_action(1, 3), -1);   // reversal is not a move
+}
+
+fn test_eating_grows_and_scores() {
+    let g = env.new_game(10);
+    put_food(g, 5, 6);
+    let r = env.step(g, 0, RW);
+    assert_eq(r, 1.0);
+    assert_eq(len(g["snake"]), 4);
+    assert_eq(g["score"], 1);
+    assert(g["ate"]);
+    assert_eq(g["occ"].sum(), 4);
+    assert(!env.blocked(g, g["food"][0], g["food"][1]));   // new food is on a free cell
+}
+
+fn test_wall_death() {
+    let g = env.new_game(10);
+    put_food(g, 0, 0);
+    var r = 0.0;
+    for (i in 0..4) { r = env.step(g, 0, RW); }   // head x: 5 -> 9
+    assert(!g["done"]);
+    r = env.step(g, 0, RW);
+    assert(g["done"]);
+    assert_eq(g["cause"], "wall");
+    assert_eq(r, -1.0);
+    assert_eq(env.step(g, 0, RW), 0.0);            // nothing happens after the end
+}
+
+fn test_self_collision() {
+    // grow to length 5 then curl into the body
+    let g = env.new_game(10);
+    for (k in 0..2) { put_food(g, g["snake"][0][0], g["snake"][0][1] + 1); env.step(g, 0, RW); }
+    assert_eq(len(g["snake"]), 5);
+    put_food(g, 0, 0);
+    env.step(g, 2, RW);   // right turn -> down
+    env.step(g, 2, RW);   // right turn -> left
+    env.step(g, 2, RW);   // right turn -> up, into the body
+    assert(g["done"]);
+    assert_eq(g["cause"], "self");
+}
+
+fn test_tail_cell_is_free_when_not_eating() {
+    // a 2x2 loop: the head may enter the cell the tail is just leaving
+    let g = env.new_game(6);
+    g["snake"] = [[2, 2], [3, 2], [3, 1], [2, 1]];
+    g["occ"] = [0; 36];
+    for (s in g["snake"]) { g["occ"][s[0] * 6 + s[1]] = 1; }
+    g["dir"] = 3;                      // heading left, towards the tail at (2,1)
+    put_food(g, 0, 5);
+    assert(!env.blocked(g, 2, 1));
+    env.step(g, 0, RW);
+    assert(!g["done"]);
+    assert_eq(g["snake"][0], [2, 1]);
+    assert_eq(g["occ"].sum(), 4);
+}
+
+fn test_starvation() {
+    let g = env.new_game(10, 4, 0, 3000);
+    put_food(g, 9, 9);
+    var last = 0.0;
+    for (i in 0..8) {
+        if (!g["done"]) {
+            // zig-zag in place so we never hit a wall
+            var a = 1;
+            if (i % 2 == 1) { a = 2; }
+            last = env.step(g, a, RW);
+        }
+    }
+    assert(g["done"]);
+    assert_eq(g["cause"], "starved");
+}
+
+fn test_win_on_full_board() {
+    let g = env.new_game(4);
+    // snake fills 15 cells, one free cell with the food, head next to it
+    let order = [[0,0],[0,1],[0,2],[0,3],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3],[3,3],[3,2],[3,1]];
+    // head first: reverse so the head is at (3,1), neighbour (3,0) is the last free cell
+    let snake = [];
+    var i = len(order) - 1;
+    while (i >= 0) { snake.push(order[i]); i -= 1; }
+    g["snake"] = snake;
+    g["occ"] = [0; 16];
+    for (s in snake) { g["occ"][s[0] * 4 + s[1]] = 1; }
+    g["dir"] = 3;
+    g["food"] = [3, 0];
+    let r = env.step(g, 0, RW);
+    assert(g["done"]);
+    assert_eq(g["cause"], "win");
+    assert_eq(r, 6.0);
+    assert_eq(len(g["snake"]), 16);
+}
+
+fn test_shaping_sign() {
+    let rw = { food: 1.0, death: -1.0, step: 0.0, win: 5.0, shaping: 0.1, starve: -0.5 };
+    let g = env.new_game(10);
+    put_food(g, 5, 9);
+    assert_eq(env.step(g, 0, rw), 0.1);      // closer
+    let g2 = env.new_game(10);
+    put_food(g2, 5, 0);
+    assert_eq(env.step(g2, 0, rw), -0.1);    // farther
+}
+
+fn test_food_never_on_snake() {
+    for (k in 0..50) {
+        let g = env.new_game(5);
+        for (i in 0..3) { env.step(g, 0, RW); }
+        let f = env.place_food(g);
+        assert(f != null);
+        assert_eq(g["occ"][f[0] * 5 + f[1]], 0);
+    }
+}

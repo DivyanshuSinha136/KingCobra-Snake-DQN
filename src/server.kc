@@ -1,0 +1,319 @@
+// server.kc - the web dashboard backend: a small JSON API plus the static front-end in web/.
+//
+// Routing is a pure function `route(ctx, req) -> response object`, and `run` is the only place that touches the
+// socket. Every game lives in a *session* (selected with `?sid=`), so two browser tabs never fight over one board.
+//
+//   GET  /                     dashboard                  GET  /api/health      liveness + uptime
+//   GET  /static/<file>        dashboard assets           GET  /api/model       model card (architecture, results)
+//   GET  /api/state            current game + Q-values    GET  /api/metrics     training curves
+//   POST /api/reset            start a new game           GET  /api/benchmark   ?episodes=N greedy games
+//   POST /api/ai-step          one greedy AI move         POST /api/human       {"action":0|1|2} or {"dir":0..3}
+//   POST /api/shutdown         stop the server (only with server.allow_shutdown = true)
+import std.http;
+import std.json;
+import std.io;
+import std.system;
+import "util.kc" as util;
+import "env.kc" as env;
+import "features.kc" as features;
+import "agent.kc" as agent;
+import "trainer.kc" as trainer;
+
+let VERSION = "1.0.1";
+let SID_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+let CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/// A JSON response.
+fn ok(value, status: int = 200) -> object {
+    return { status: status, body: json.stringify(value), type: "application/json", stop: false, headers: [] };
+}
+
+fn fail(status: int, message: string, headers: array = []) -> object {
+    return { status: status, body: json.stringify({ error: message, status: status }), type: "application/json", stop: false, headers: headers };
+}
+
+fn content_type(name: string) -> string {
+    if (name.ends_with(".html")) { return "text/html; charset=utf-8"; }
+    if (name.ends_with(".css")) { return "text/css; charset=utf-8"; }
+    if (name.ends_with(".js")) { return "text/javascript; charset=utf-8"; }
+    if (name.ends_with(".svg")) { return "image/svg+xml"; }
+    if (name.ends_with(".json")) { return "application/json"; }
+    return "application/octet-stream";
+}
+
+/// Read every file of web/ once at start-up. Only these exact names are ever served, so there is no path to traverse.
+fn load_assets(web_dir: string) -> object {
+    let assets = {};
+    if (!system.is_dir(web_dir)) { util.fail("web directory not found: " + web_dir); }
+    for (entry in system.list_dir(web_dir)) {
+        let p = system.path_join(web_dir, entry);
+        if (system.is_file(p)) { assets[entry] = { body: io.read_file(p), type: content_type(entry) }; }
+    }
+    if (assets["index.html"] == null) { util.fail("web/index.html is missing"); }
+    return assets;
+}
+
+/// Accept only simple session ids.
+fn clean_sid(raw) -> string {
+    if (raw == null) { return "default"; }
+    let s = str(raw);
+    if (len(s) < 1 || len(s) > 40) { return "default"; }
+    for (ch in s) {
+        if (!SID_CHARS.contains(ch)) { return "default"; }
+    }
+    return s;
+}
+
+fn new_game(ctx: object) -> object {
+    return trainer.new_env(ctx["cfg"]);
+}
+
+fn get_session(ctx: object, sid: string) -> object {
+    let ss = ctx["sessions"];
+    if (ss[sid] == null) {
+        if (len(keys(ss)) >= ctx["cfg"]["server"]["max_sessions"]) {
+            var oldest = "";
+            var oldest_t = 0.0;
+            for (k in keys(ss)) {
+                if (oldest == "" || ss[k]["last_used"] < oldest_t) { oldest = k; oldest_t = ss[k]["last_used"]; }
+            }
+            ss.remove(oldest);
+        }
+        ss[sid] = { game: new_game(ctx), games: 0, best: 0, total: 0, last_used: system.time() };
+    }
+    ss[sid]["last_used"] = system.time();
+    return ss[sid];
+}
+
+/// Record a finished game in the session statistics (once).
+fn settle(sess: object) {
+    let g = sess["game"];
+    if (g["done"] && !g["settled"]) {
+        g["settled"] = true;
+        sess["games"] += 1;
+        sess["total"] += g["score"];
+        if (g["score"] > sess["best"]) { sess["best"] = g["score"]; }
+    }
+}
+
+fn round3(x: float) -> float { return round(x * 1000.0) / 1000.0; }
+
+/// Round every element to 3 decimals. A plain loop on purpose: no closures on the request path.
+fn round_all(a: array) -> array {
+    let out = [];
+    for (x in a) { out.push(round3(x)); }
+    return out;
+}
+
+/// The state the front-end draws: the board, the network's Q-values for it and the feature vector behind them.
+fn snapshot(ctx: object, sess: object) -> object {
+    let g = sess["game"];
+    let view = env.public_view(g);
+    let feats = features.encode(g, ctx["cfg"]["features"]["flood"]);
+    let q = agent.q_values(ctx["agent"], feats);
+    view["q"] = round_all(q);
+    view["best_action"] = util.argmax(q);
+    view["features"] = round_all(feats);
+    var mean = 0.0;
+    if (sess["games"] > 0) { mean = sess["total"] / sess["games"]; }
+    view["session"] = { games: sess["games"], best: sess["best"], mean: round3(mean) };
+    return view;
+}
+
+fn query_value(req, name: string) -> any {
+    for (pair in http.query_parse(req.query)) { if (pair[0] == name) { return pair[1]; } }
+    return null;
+}
+
+fn read_metrics(ctx: object) -> object {
+    let p = trainer.paths(ctx["cfg"]);
+    if (!io.exists(p["metrics"])) { return { history: [], name: ctx["cfg"]["train"]["name"], episodes_done: 0 }; }
+    return json.parse(io.read_file(p["metrics"]));
+}
+
+fn histogram(scores: array, bins: int = 10) -> object {
+    let hi = util.max_of(scores);
+    var width = 1;
+    while (width * bins <= hi) { width += 1; }
+    let counts = [0; bins];
+    for (s in scores) {
+        var b = int(s / width);
+        if (b >= bins) { b = bins - 1; }
+        counts[b] += 1;
+    }
+    return { width: width, counts: counts };
+}
+
+fn static_reply(a: object) -> object {
+    return { status: 200, body: a["body"], type: a["type"], stop: false, headers: ["Cache-Control: no-cache"] };
+}
+
+fn route(ctx: object, req) -> object {
+    let path = req.path;
+    let m = req.method;
+    let sid = clean_sid(query_value(req, "sid"));
+
+    // ---- static ----
+    if (path == "/" || path == "/index.html") {
+        if (m != "GET" && m != "HEAD") { return fail(405, "method not allowed", ["Allow: GET, HEAD"]); }
+        return static_reply(ctx["assets"]["index.html"]);
+    }
+    if (path.starts_with("/static/")) {
+        if (m != "GET" && m != "HEAD") { return fail(405, "method not allowed", ["Allow: GET, HEAD"]); }
+        let name = path.slice(8, len(path));
+        let a = ctx["assets"][name];
+        if (a == null || name == "index.html") { return fail(404, "no such asset"); }
+        return static_reply(a);
+    }
+    if (path == "/favicon.ico") {
+        let a = ctx["assets"]["favicon.svg"];
+        if (a == null) { return { status: 204, body: "", type: "text/plain", stop: false, headers: [] }; }
+        return static_reply(a);
+    }
+
+    // ---- API: read-only ----
+    if (path == "/api/health") {
+        if (m != "GET") { return fail(405, "method not allowed", ["Allow: GET"]); }
+        return ok({ status: "ok", version: VERSION, uptime: round3(system.monotonic() - ctx["started"]), sessions: len(keys(ctx["sessions"])) });
+    }
+    if (path == "/api/model") {
+        if (m != "GET") { return fail(405, "method not allowed", ["Allow: GET"]); }
+        return ok(ctx["card"]);
+    }
+    if (path == "/api/metrics") {
+        if (m != "GET") { return fail(405, "method not allowed", ["Allow: GET"]); }
+        return ok(read_metrics(ctx));
+    }
+    if (path == "/api/state") {
+        if (m != "GET") { return fail(405, "method not allowed", ["Allow: GET"]); }
+        return ok(snapshot(ctx, get_session(ctx, sid)));
+    }
+    if (path == "/api/benchmark") {
+        if (m != "GET") { return fail(405, "method not allowed", ["Allow: GET"]); }
+        var n = 20;
+        let raw = query_value(req, "episodes");
+        if (raw != null) { n = int(raw); }
+        let cap = ctx["cfg"]["server"]["benchmark_max"];
+        if (n < 1 || n > cap) { return fail(400, "episodes must be between 1 and " + str(cap)); }
+        let r = trainer.evaluate(ctx["agent"], ctx["cfg"], n);
+        return ok({
+            episodes: n, mean: round3(r["mean"]), max: r["max"], std: round3(r["std"]), mean_length: round3(r["mean_length"]),
+            deaths: r["deaths"], scores: r["scores"], histogram: histogram(r["scores"])
+        });
+    }
+
+    // ---- API: actions ----
+    if (path == "/api/reset") {
+        if (m != "POST") { return fail(405, "method not allowed", ["Allow: POST"]); }
+        let sess = get_session(ctx, sid);
+        sess["game"] = new_game(ctx);
+        return ok(snapshot(ctx, sess));
+    }
+    if (path == "/api/ai-step") {
+        if (m != "POST") { return fail(405, "method not allowed", ["Allow: POST"]); }
+        let sess = get_session(ctx, sid);
+        let g = sess["game"];
+        var decision = null;
+        if (!g["done"]) {
+            let feats = features.encode(g, ctx["cfg"]["features"]["flood"]);
+            let q = agent.q_values(ctx["agent"], feats);
+            let a = util.argmax(q);
+            env.step(g, a, ctx["cfg"]["reward"]);
+            decision = { action: a, name: env.ACTION_NAMES[a], q: round_all(q) };
+            settle(sess);
+        }
+        let view = snapshot(ctx, sess);
+        view["decision"] = decision;
+        return ok(view);
+    }
+    if (path == "/api/human") {
+        if (m != "POST") { return fail(405, "method not allowed", ["Allow: POST"]); }
+        let body = json.try_parse(req.body, null);
+        if (body == null || typeof(body) != "object") { return fail(400, "body must be a JSON object like {\"action\":0} or {\"dir\":1}"); }
+        let sess = get_session(ctx, sid);
+        let g = sess["game"];
+        var action = 0;
+        if (body["action"] != null) {
+            if (typeof(body["action"]) != "int" || body["action"] < 0 || body["action"] > 2) { return fail(400, "action must be 0 (straight), 1 (left) or 2 (right)"); }
+            action = body["action"];
+        } else if (body["dir"] != null) {
+            if (typeof(body["dir"]) != "int" || body["dir"] < 0 || body["dir"] > 3) { return fail(400, "dir must be 0 (up), 1 (right), 2 (down) or 3 (left)"); }
+            action = env.relative_action(g["dir"], body["dir"]);
+            if (action < 0) { action = 0; }      // a 180-degree reversal is ignored, as in the real game
+        } else {
+            return fail(400, "give either \"action\" or \"dir\"");
+        }
+        if (!g["done"]) {
+            env.step(g, action, ctx["cfg"]["reward"]);
+            settle(sess);
+        }
+        return ok(snapshot(ctx, sess));
+    }
+    if (path == "/api/shutdown") {
+        if (m != "POST") { return fail(405, "method not allowed", ["Allow: POST"]); }
+        if (!ctx["cfg"]["server"]["allow_shutdown"]) { return fail(403, "shutdown is disabled (set server.allow_shutdown=true)"); }
+        let r = ok({ ok: true });
+        r["stop"] = true;
+        return r;
+    }
+    if (path.starts_with("/api/")) { return fail(404, "no such endpoint: " + path); }
+    return fail(404, "not found");
+}
+
+/// Send a route result over the socket, with the standard security headers.
+fn send(req, r: object) {
+    let headers = ["Content-Type: " + r["type"], "X-Content-Type-Options: nosniff", "Referrer-Policy: no-referrer",
+                   "Content-Security-Policy: " + CSP];
+    if (r["type"] == "application/json") { headers.push("Cache-Control: no-store"); }
+    for (h in r["headers"]) { headers.push(h); }
+    http.respond(req, r["status"], r["body"], headers);
+}
+
+/// Load the saved model (training one first if allowed) and serve until shut down.
+fn run(cfg: object, root: string, train_if_missing: bool) {
+    let p = trainer.paths(cfg);
+    var ag = null;
+    if (io.exists(p["model"])) {
+        ag = agent.load(p["model"], features.DIM, cfg["agent"]);
+    } else if (train_if_missing) {
+        print("no model found at " + p["model"] + " - training one first (use --no-train to disable)");
+        ag = trainer.train(cfg, true)["agent"];
+    } else {
+        util.fail("no trained model at " + p["model"] + " - run `train` first");
+    }
+    var card = { name: cfg["train"]["name"], note: "model card not found" };
+    if (io.exists(p["card"])) { card = json.parse(io.read_file(p["card"])); }
+
+    let ctx = {
+        cfg: cfg, agent: ag, card: card, sessions: {}, started: system.monotonic(),
+        assets: load_assets(system.path_join(root, "web"))
+    };
+    let s = http.listen(cfg["server"]["port"], cfg["server"]["host"]);
+    let port = http.server_port(s);
+    let portfile = system.getenv_or("KC_PORT_FILE", "");
+    if (portfile != "") { io.write_file(portfile, str(port)); }
+
+    print("");
+    print("==========================================");
+    print("  KingCobra Snake DQN - dashboard ready");
+    print("  ->  http://" + cfg["server"]["host"] + ":" + str(port));
+    print("==========================================");
+    print("Press Ctrl+C to stop.");
+
+    var running = true;
+    while (running) {
+        let req = http.accept(s, 1.0);
+        if (req == null) { continue; }
+        let t0 = system.monotonic();
+        var r = null;
+        try { r = route(ctx, req); }
+        catch (e) { r = fail(500, "internal error: " + e.message); }
+        send(req, r);
+        if (cfg["server"]["log"]) {
+            print(f"{req.method.pad_right(5, " ")} {req.path.pad_right(18, " ")} {r["status"]}  {util.fmt((system.monotonic() - t0) * 1000.0, 1)} ms");
+        }
+        if (r["stop"]) { running = false; }
+    }
+    http.close(s);
+    print("server stopped");
+}
