@@ -1,0 +1,11 @@
+# local training runs and scratch models (the shipped models/snake_ddqn.* files are tracked)
+models/*
+!models/snake_ddqn.kcnn
+!models/snake_ddqn.json
+!models/snake_ddqn.metrics.json
+!models/.gitkeep
+*.tmp
+*.kcnative.so
+*.log
+.DS_Store
+node_modules/
