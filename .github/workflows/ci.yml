@@ -1,0 +1,30 @@
+# NOTE: this workflow has not been run on GitHub yet. It builds KingCobra from source, because there is no
+# prebuilt package to depend on; adjust the repository / ref below if you pin a release.
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: DivyanshuSinha136/KingCobra
+          path: .kingcobra
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build KingCobra
+        run: make -C .kingcobra -j"$(nproc)"
+      - name: Type-check
+        run: .kingcobra/kingcobra check src/ tests/
+      - name: KingCobra tests
+        run: .kingcobra/kingcobra test tests/
+      - name: Front-end tests
+        run: |
+          node tests/web/pure.test.js
+          KINGCOBRA="$PWD/.kingcobra/kingcobra" ./scripts/test_web.sh
+      - name: The shipped model still loads and plays
+        run: .kingcobra/kingcobra run src/main.kc eval --episodes 5
